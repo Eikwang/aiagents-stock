@@ -123,9 +123,9 @@ class StockDataFetcher:
                                 pass
             except Exception as e:
                 print(f"[Akshare] 获取个股详细信息失败: {e}")
-                # 如果akshare失败，尝试从tushare获取
-                if self.data_source_manager.tushare_available and info['name'] == '未知':
-                    print(f"[Tushare] 尝试获取基本信息（tushare）...")
+                # 如果akshare失败，尝试从tushare获取（无论name是否为未知）
+                if self.data_source_manager.tushare_available:
+                    print(f"[Tushare] 尝试获取基本信息（tushare备用）...")
                     try:
                         ts_code = self.data_source_manager._convert_to_ts_code(symbol)
                         df = self.data_source_manager.tushare_api.daily_basic(
@@ -134,10 +134,28 @@ class StockDataFetcher:
                         )
                         if df is not None and not df.empty:
                             row = df.iloc[0]
-                            info['pe_ratio'] = row.get('pe', 'N/A')
-                            info['pb_ratio'] = row.get('pb', 'N/A')
-                            info['market_cap'] = row.get('total_mv', 'N/A')
-                            print(f"[Tushare] ✅ 成功获取部分信息")
+                            # Tushare的pe/pb单位是倍数，直接使用
+                            if info['pe_ratio'] == 'N/A':
+                                pe_val = row.get('pe', None)
+                                if pe_val and not pd.isna(pe_val):
+                                    info['pe_ratio'] = float(pe_val)
+                            if info['pb_ratio'] == 'N/A':
+                                pb_val = row.get('pb', None)
+                                if pb_val and not pd.isna(pb_val):
+                                    info['pb_ratio'] = float(pb_val)
+                            # Tushare的total_mv单位是万元，需要转换为元
+                            if info['market_cap'] == 'N/A':
+                                total_mv = row.get('total_mv', None)
+                                if total_mv and not pd.isna(total_mv):
+                                    # 转换为元（万元 * 10000）
+                                    info['market_cap'] = float(total_mv) * 10000
+                                    print(f"[Tushare] ✅ 获取市值: {info['market_cap']} 元")
+                            # 获取当前价格
+                            if info['current_price'] == 'N/A':
+                                close_val = row.get('close', None)
+                                if close_val and not pd.isna(close_val):
+                                    info['current_price'] = float(close_val)
+                            print(f"[Tushare] ✅ 成功获取基本信息")
                     except Exception as te:
                         print(f"[Tushare] ❌ 获取失败: {te}")
             

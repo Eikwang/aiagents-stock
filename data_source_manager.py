@@ -195,21 +195,43 @@ class DataSourceManager:
         if self.tushare_available:
             try:
                 print(f"[Tushare] 正在获取 {symbol} 的基本信息（备用数据源）...")
-                
+
                 ts_code = self._convert_to_ts_code(symbol)
+
+                # 获取基本信息
                 df = self.tushare_api.stock_basic(
                     ts_code=ts_code,
                     fields='ts_code,name,area,industry,market,list_date'
                 )
-                
+
                 if df is not None and not df.empty:
                     info['name'] = df.iloc[0]['name']
                     info['industry'] = df.iloc[0]['industry']
                     info['market'] = df.iloc[0]['market']
                     info['list_date'] = df.iloc[0]['list_date']
-                    
-                    print(f"[Tushare] ✅ 成功获取基本信息")
-                    return info
+
+                # 获取市值等数据（需要使用daily_basic接口）
+                try:
+                    df_daily = self.tushare_api.daily_basic(
+                        ts_code=ts_code,
+                        trade_date=datetime.now().strftime('%Y%m%d')
+                    )
+                    if df_daily is not None and not df_daily.empty:
+                        row = df_daily.iloc[0]
+                        # total_mv单位是万元，转换为元
+                        total_mv = row.get('total_mv', None)
+                        if total_mv and not pd.isna(total_mv):
+                            info['market_cap'] = float(total_mv) * 10000
+                        # circ_mv单位是万元，转换为元
+                        circ_mv = row.get('circ_mv', None)
+                        if circ_mv and not pd.isna(circ_mv):
+                            info['circulating_market_cap'] = float(circ_mv) * 10000
+                        print(f"[Tushare] ✅ 获取市值: {info.get('market_cap', 'N/A')}")
+                except Exception as e:
+                    print(f"[Tushare] 获取市值失败: {e}")
+
+                print(f"[Tushare] ✅ 成功获取基本信息")
+                return info
             except Exception as e:
                 print(f"[Tushare] ❌ 获取失败: {e}")
         
